@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Secure Code Review Lab</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2d;
+      --panel-2: #172238;
+      --border: #293650;
+      --text: #e8eef8;
+      --muted: #a4b1c7;
+      --accent: #67e8c1;
+      --accent-dark: #102f31;
+      --red: #ff7777;
+      --orange: #ffbd69;
+      --yellow: #f8db72;
+      --green: #7fe0a3;
+      --blue: #92b8ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top right, #192747 0, var(--bg) 45%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 32px 20px 48px; }
+    header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+    .brand-icon {
+      width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center;
+      background: linear-gradient(140deg, #183b44, #1d3052); border: 1px solid #35636a; font-size: 25px;
+    }
+    h1 { font-size: clamp(24px, 3vw, 34px); margin: 0; letter-spacing: -0.7px; }
+    .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+    .notice {
+      padding: 12px 15px; border: 1px solid #66512b; background: #2b2418; color: #f6dca4;
+      border-radius: 12px; margin-bottom: 22px; font-size: 13px;
+    }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(360px, .82fr); gap: 20px; align-items: start; }
+    .panel { background: rgba(18,26,45,.95); border: 1px solid var(--border); border-radius: 17px; overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,.16); }
+    .panel-head { padding: 18px 20px; border-bottom: 1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .panel-head h2 { font-size: 16px; margin: 0; }
+    .panel-body { padding: 19px 20px 20px; }
+    label { display: block; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 7px; }
+    .field-row { display:grid; grid-template-columns: 1fr 170px; gap: 12px; margin-bottom: 15px; }
+    input[type="text"], select, textarea {
+      width: 100%; border: 1px solid var(--border); color: var(--text); background: #0c1324; border-radius: 10px; outline: none;
+    }
+    input[type="text"], select { padding: 11px 12px; }
+    input:focus, select:focus, textarea:focus { border-color: #5ebca8; box-shadow: 0 0 0 3px rgba(103,232,193,.09); }
+    textarea {
+      min-height: 390px; resize: vertical; padding: 16px; font: 13px/1.65 "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+      tab-size: 4; white-space: pre; overflow: auto;
+    }
+    .small-help { color: var(--muted); font-size: 12px; margin: 9px 0 0; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:9px; margin-top: 15px; }
+    button, .file-button {
+      display:inline-flex; justify-content:center; align-items:center; gap:8px; cursor:pointer;
+      border:1px solid var(--border); border-radius:10px; padding:10px 13px; font-size:13px; font-weight:700;
+      color:var(--text); background:#1a2540; transition:transform .12s ease, border-color .12s ease;
+    }
+    button:hover, .file-button:hover { border-color:#5a789a; transform:translateY(-1px); }
+    .primary { background:var(--accent); color:#06251f; border-color:var(--accent); }
+    .primary:hover { border-color:#a4ffe6; }
+    .secondary { background: transparent; }
+    input[type="file"] { display:none; }
+    .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:18px 20px; border-bottom:1px solid var(--border); }
+    .metric { background:#0d1527; border:1px solid var(--border); padding:12px; border-radius:12px; }
+    .metric span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+    .metric strong { display:block; font-size:25px; margin-top:2px; }
+    .metric.high strong { color:var(--red); }
+    .metric.medium strong { color:var(--orange); }
+    .result-list { padding: 16px 20px 20px; }
+    .empty { padding: 32px 14px; text-align:center; color:var(--muted); border:1px dashed #35415d; border-radius:12px; }
+    .empty .empty-icon { font-size:25px; margin-bottom:6px; }
+    .finding { border:1px solid var(--border); border-radius:12px; background:#10182b; padding:14px; margin-bottom:12px; }
+    .finding-top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .finding-title { font-size:14px; font-weight:800; }
+    .severity { border-radius:999px; padding:3px 8px; font-size:10px; font-weight:900; letter-spacing:.07em; }
+    .severity.HIGH { color:#ffb0b0; background:#48262f; border:1px solid #85414a; }
+    .severity.MEDIUM { color:#ffd69a; background:#45331e; border:1px solid #795a2f; }
+    .severity.LOW { color:#b5d0ff; background:#243453; border:1px solid #3f5a88; }
+    .line { color:var(--muted); font-size:11px; white-space:nowrap; }
+    .code { display:block; overflow-wrap:anywhere; white-space:pre-wrap; color:#d8e4f5; background:#080e1b; border:1px solid #202b40; border-radius:8px; padding:10px; margin:9px 0; font:12px/1.55 "Cascadia Code", Consolas, monospace; }
+    .detail { font-size:12px; margin:7px 0 0; color:#c4cede; }
+    .detail b { color:#eaf2ff; }
+    .section-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 8px; }
+    .bottom-note { margin-top:22px; color:var(--muted); font-size:12px; text-align:center; }
+    .toast { margin-top:10px; color:var(--accent); font-size:12px; min-height:18px; }
+    @media (max-width: 900px) { .layout { grid-template-columns:1fr; } textarea { min-height:300px; } }
+    @media (max-width: 520px) { .wrap { padding:20px 12px 32px; } .field-row { grid-template-columns:1fr; } .metrics { padding:12px; gap:7px; } .metric { padding:9px; } .metric strong { font-size:21px; } .panel-body { padding:14px; } .panel-head { padding:15px; } .result-list { padding:13px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="brand-icon" aria-hidden="true">🛡️</div>
+      <div>
+        <h1>Secure Code Review Lab</h1>
+        <p class="subtitle">A simple, browser-based security pattern checker for Python and C++</p>
+      </div>
+    </header>
+
+    <div class="notice"><strong>Training tool:</strong> This page uses local, pattern-based checks. It does not execute your code or upload it anywhere. Findings need manual validation; this is not a complete security audit.</div>
+
+    <div class="layout">
+      <section class="panel" aria-labelledby="editor-heading">
+        <div class="panel-head">
+          <h2 id="editor-heading">Source code</h2>
+          <span class="line" id="file-status">No file selected</span>
+        </div>
+        <div class="panel-body">
+          <div class="field-row">
+            <div>
+              <label for="filename">File name</label>
+              <input id="filename" type="text" value="sample_vulnerable.py" placeholder="example.py or example.cpp" />
+            </div>
+            <div>
+              <label for="language">Language</label>
+              <select id="language">
+                <option value="auto">Auto detect</option>
+                <option value="python">Python</option>
+                <option value="cpp">C++</option>
+              </select>
+            </div>
+          </div>
+          <label for="code">Paste or write code</label>
+          <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Source code editor" placeholder="Paste Python or C++ source code here..."></textarea>
+          <p class="small-help">Tip: You can paste source code directly or use “Select file” to load a local .py, .cpp, .cc, .cxx, .h, or .hpp file.</p>
+          <div class="toolbar">
+            <label class="file-button" for="file-input" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">＋ Select file</label>
+            <input id="file-input" type="file" accept=".py,.cpp,.cc,.cxx,.h,.hpp,.c" />
+            <button class="primary" id="scan-btn" type="button">⌕ Run security scan</button>
+            <button class="secondary" id="sample-python" type="button">Load Python sample</button>
+            <button class="secondary" id="sample-cpp" type="button">Load C++ sample</button>
+            <button class="secondary" id="clear-btn" type="button">Clear</button>
+          </div>
+          <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="results-heading">
+        <div class="panel-head">
+          <h2 id="results-heading">Scan results</h2>
+          <button class="secondary" id="download-btn" type="button" disabled>↓ Export report</button>
+        </div>
+        <div class="metrics" aria-live="polite">
+          <div class="metric"><span>Total findings</span><strong id="total-count">—</strong></div>
+          <div class="metric high"><span>High risk</span><strong id="high-count">—</strong></div>
+          <div class="metric medium"><span>Medium risk</span><strong id="medium-count">—</strong></div>
+        </div>
+        <div class="result-list" id="results" aria-live="polite">
+          <div class="empty"><div class="empty-icon">⌕</div><strong>Ready to review</strong><div>Paste code or select a file, then run the scan.</div></div>
+        </div>
+      </section>
+    </div>
+    <p class="bottom-note">Runs entirely in your browser · No server required · Findings are based on simple regular-expression rules</p>
+  </main>
+
+  <script>
+    "use strict";
+
+    const rules = {
+      common: [
+        {
+          regex: /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*=\s*(['"])[^'"\n]{3,}\1/i,
+          severity: "MEDIUM", title: "Possible hardcoded secret",
+          risk: "Credentials or tokens stored in source code can be exposed through source control or file access.",
+          fix: "Read secrets from environment variables or a managed secret store. Rotate any real credential that was exposed."
+        }
+      ],
+      python: [
+        { regex: /\beval\s*\(/, severity: "HIGH", title: "Use of eval()", risk: "Evaluating a string as code can execute unintended Python expressions when input is untrusted.", fix: "Avoid eval(). Use a safe parser or explicit validation for the exact data format expected." },
+        { regex: /\bexec\s*\(/, severity: "HIGH", title: "Use of exec()", risk: "Dynamic code execution may run arbitrary Python code if the input can be controlled by an attacker.", fix: "Replace dynamic execution with explicit functions or well-defined logic." },
+        { regex: /\bshell\s*=\s*True\b/, severity: "HIGH", title: "Subprocess shell=True", risk: "Combining shell execution with untrusted command data can lead to operating-system command injection.", fix: "Prefer subprocess.run([...], shell=False) with separate arguments, and validate any input." },
+        { regex: /\bpickle\.(?:load|loads)\s*\(/, severity: "HIGH", title: "Potentially unsafe pickle deserialization", risk: "Unpickling untrusted data can execute code during deserialization.", fix: "Never unpickle untrusted data. Use a safer data format such as JSON for simple data." },
+        { regex: /\.execute\s*\(\s*f[\'"]/, severity: "HIGH", title: "Possible SQL injection via f-string", risk: "Interpolating variable data into SQL may let input change the query structure.", fix: "Use a parameterized query with bound parameters." },
+        { regex: /\.execute\s*\(\s*[\'"][^\'"]*[\'"]\s*\+/, severity: "HIGH", title: "Possible SQL query concatenation", risk: "Concatenating data into an SQL query can create an SQL injection risk.", fix: "Use the database driver's parameterized-query interface." }
+      ],
+      cpp: [
+        { regex: /\bgets\s*\(/, severity: "HIGH", title: "Use of gets()", risk: "gets() has no way to limit input to the destination buffer's capacity.", fix: "Use std::getline for C++ strings or another input routine with explicit bounds checks." },
+        { regex: /\bstrcpy\s*\(/, severity: "HIGH", title: "Use of strcpy()", risk: "Copying data that exceeds the destination buffer can cause a buffer overflow.", fix: "Prefer std::string or use a design that checks destination capacity before copying." },
+        { regex: /\bstrcat\s*\(/, severity: "HIGH", title: "Use of strcat()", risk: "Appending without checking available capacity can overflow the destination buffer.", fix: "Prefer std::string and its append operations." },
+        { regex: /\bsprintf\s*\(/, severity: "HIGH", title: "Use of sprintf()", risk: "Formatted output can exceed the destination buffer size.", fix: "Prefer C++ string formatting with safe sizing or a bounded formatting approach." },
+        { regex: /\bsystem\s*\(/, severity: "HIGH", title: "Use of system()", risk: "Passing attacker-controlled content to a shell can enable command injection.", fix: "Avoid shell invocation where possible; use a safer API and strictly validate inputs." },
+        { regex: /\bscanf\s*\(\s*['"][^'"\n]*%s/, severity: "HIGH", title: "Potentially unbounded scanf string input", risk: "A %s conversion without a field width can overflow a fixed-size character buffer.", fix: "Use a bounded input method or a C++ string-based approach." }
+      ]
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const editor = $("code");
+    const filenameInput = $("filename");
+    const languageInput = $("language");
+    const results = $("results");
+    let lastReport = "";
+    let selectedFileName = "";
+
+    function getLanguage(name) {
+      const choice = languageInput.value;
+      if (choice !== "auto") return choice;
+      const lower = name.toLowerCase();
+      if (lower.endsWith(".py")) return "python";
+      if ([".cpp", ".cc", ".cxx", ".hpp", ".h", ".c"].some(ext => lower.endsWith(ext))) return "cpp";
+      return null;
+    }
+
+    function showToast(message) { $("toast").textContent = message; }
+
+    function clearResults(message = "Paste code or select a file, then run the scan.") {
+      results.replaceChildren();
+      const box = document.createElement("div");
+      box.className = "empty";
+      const icon = document.createElement("div"); icon.className = "empty-icon"; icon.textContent = "⌕";
+      const strong = document.createElement("strong"); strong.textContent = "Ready to review";
+      const detail = document.createElement("div"); detail.textContent = message;
+      box.append(icon, strong, detail); results.append(box);
+      $("total-count").textContent = "—";
+      $("high-count").textContent = "—";
+      $("medium-count").textContent = "—";
+      $("download-btn").disabled = true;
+      lastReport = "";
+    }
+
+    function buildFinding(finding) {
+      const card = document.createElement("article"); card.className = "finding";
+      const top = document.createElement("div"); top.className = "finding-top";
+      const title = document.createElement("div"); title.className = "finding-title"; title.textContent = finding.title;
+      const right = document.createElement("div"); right.style.display = "flex"; right.style.alignItems = "center"; right.style.gap = "8px";
+      const severity = document.createElement("span"); severity.className = `severity ${finding.severity}`; severity.textContent = finding.severity;
+      const line = document.createElement("span"); line.className = "line"; line.textContent = `Line ${finding.line}`;
+      right.append(severity, line); top.append(title, right);
+      const snippet = document.createElement("code"); snippet.className = "code"; snippet.textContent = finding.code || "(no source line)";
+      const risk = document.createElement("p"); risk.className = "detail";
+      const riskLabel = document.createElement("b"); riskLabel.textContent = "Risk: "; risk.append(riskLabel, document.createTextNode(finding.risk));
+      const fix = document.createElement("p"); fix.className = "detail";
+      const fixLabel = document.createElement("b"); fixLabel.textContent = "Suggested fix: "; fix.append(fixLabel, document.createTextNode(finding.fix));
+      card.append(top, snippet, risk, fix);
+      return card;
+    }
+
+    function scan() {
+      const source = editor.value;
+      const fileName = filenameInput.value.trim() || "untitled.py";
+      const language = getLanguage(fileName);
+      if (!source.trim()) { showToast("Paste or load some source code first."); editor.focus(); return; }
+      if (!language) { showToast("Choose Python or C++, or use a .py/.cpp filename for auto-detection."); return; }
+
+      const applicableRules = [...rules.common, ...rules[language]];
+      const findings = [];
+      const lines = source.split(/\r?\n/);
+      lines.forEach((line, index) => {
+        // One match per rule per line. This intentionally simple scanner is a learning aid.
+        applicableRules.forEach(rule => {
+          if (rule.regex.test(line)) {
+            findings.push({ line: index + 1, code: line.trim(), ...rule });
+          }
+          rule.regex.lastIndex = 0;
+        });
+      });
+
+      const high = findings.filter(f => f.severity === "HIGH").length;
+      const medium = findings.filter(f => f.severity === "MEDIUM").length;
+      const low = findings.filter(f => f.severity === "LOW").length;
+      $("total-count").textContent = String(findings.length);
+      $("high-count").textContent = String(high);
+      $("medium-count").textContent = String(medium);
+      results.replaceChildren();
+
+      if (!findings.length) {
+        const box = document.createElement("div"); box.className = "empty";
+        const icon = document.createElement("div"); icon.className = "empty-icon"; icon.textContent = "✓";
+        const strong = document.createElement("strong"); strong.textContent = "No known patterns detected";
+        const detail = document.createElement("div"); detail.textContent = "This does not prove the code is secure. Complete a manual review too.";
+        box.append(icon, strong, detail); results.append(box);
+      } else {
+        const summary = document.createElement("p"); summary.className = "small-help";
+        summary.textContent = `${findings.length} pattern(s) flagged in ${fileName}. Review each result to determine whether it is a real issue.`;
+        results.append(summary);
+        findings.forEach(f => results.append(buildFinding(f)));
+      }
+
+      const reportLines = [
+        "SECURE CODE REVIEW REPORT",
+        "==========================",
+        `File: ${fileName}`,
+        `Language: ${language.toUpperCase()}`,
+        `Findings: ${findings.length} (High: ${high}, Medium: ${medium}, Low: ${low})`,
+        "",
+        ...findings.flatMap((f, i) => [
+          `Finding ${i + 1}: ${f.title}`,
+          `Severity: ${f.severity}`,
+          `Line: ${f.line}`,
+          `Code: ${f.code}`,
+          `Risk: ${f.risk}`,
+          `Suggested fix: ${f.fix}`,
+          "-".repeat(50),
+          ""
+        ]),
+        "Limitations: Regex-based educational scan only. False positives and missed issues are possible. Manual validation is required."
+      ];
+      lastReport = reportLines.join("\n");
+      $("download-btn").disabled = false;
+      showToast(`Scan completed: ${findings.length} finding(s) flagged. No code was uploaded or executed.`);
+    }
+
+    $("scan-btn").addEventListener("click", scan);
+
+    $("file-input").addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const extension = file.name.split(".").pop().toLowerCase();
+      const allowed = ["py", "cpp", "cc", "cxx", "h", "hpp", "c"];
+      if (!allowed.includes(extension)) {
+        showToast("Unsupported file type. Select a Python or C/C++ source file.");
+        event.target.value = "";
+        return;
+      }
+      try {
+        editor.value = await file.text();
+        filenameInput.value = file.name;
+        selectedFileName = file.name;
+        $("file-status").textContent = file.name;
+        languageInput.value = "auto";
+        showToast(`Loaded ${file.name}. Click “Run security scan” to review it.`);
+      } catch (error) {
+        showToast("Could not read that file. Try selecting it again.");
+      }
+      event.target.value = "";
+    });
+
+    const pythonSample = `import subprocess\n\npassword = "admin123"\n\ndef calculate(expression):\n    # Intentionally unsafe example\n    return eval(expression)\n\ndef run_command(user_input):\n    # Intentionally unsafe example\n    subprocess.run("echo " + user_input, shell=True, check=False)\n`;
+
+    const cppSample = `#include <cstdlib>\n#include <cstring>\n\nvoid review_example(const char* user_input)\n{\n    char buffer[16];\n\n    // Intentionally unsafe examples\n    strcpy(buffer, user_input);\n    system(user_input);\n}\n\nint main()\n{\n    return 0;\n}\n`;
+
+    $("sample-python").addEventListener("click", () => {
+      editor.value = pythonSample;
+      filenameInput.value = "sample_vulnerable.py";
+      languageInput.value = "auto";
+      $("file-status").textContent = "Built-in Python sample";
+      showToast("Loaded the training sample. It is not executed by this page.");
+    });
+
+    $("sample-cpp").addEventListener("click", () => {
+      editor.value = cppSample;
+      filenameInput.value = "sample_vulnerable.cpp";
+      languageInput.value = "auto";
+      $("file-status").textContent = "Built-in C++ sample";
+      showToast("Loaded the training sample. It is not compiled or executed by this page.");
+    });
+
+    $("clear-btn").addEventListener("click", () => {
+      editor.value = "";
+      filenameInput.value = "untitled.py";
+      languageInput.value = "auto";
+      $("file-status").textContent = "No file selected";
+      clearResults();
+      showToast("Editor cleared.");
+    });
+
+    $("download-btn").addEventListener("click", () => {
+      if (!lastReport) return;
+      const blob = new Blob([lastReport], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "secure_code_review_report.txt";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast("Report exported.");
+    });
+
+    // Make the sample available immediately so the page can be tested with one click.
+    editor.value = pythonSample;
+  </script>
+</body>
+</html>
